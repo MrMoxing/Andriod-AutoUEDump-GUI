@@ -19,6 +19,7 @@ namespace UEWrappers
     UE_Offsets *GetOffsets();
     std::string GetNameByID(int32_t id);
     uintptr_t GetBaseAddress();
+    uint32_t GetInitGeneration();
 };  // namespace UEWrappers
 
 template <class T>

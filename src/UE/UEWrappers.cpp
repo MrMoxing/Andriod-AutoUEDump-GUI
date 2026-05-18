@@ -1,4 +1,4 @@
-#include "UEWrappers.hpp"
+﻿#include "UEWrappers.hpp"
 using namespace UEMemory;
 
 #include <hash/hash.h>
@@ -7,10 +7,32 @@ using namespace UEMemory;
 
 #include <utfcpp/unchecked.h>
 
+#define UE_STATIC_CLASS_CACHED(NAME)                                                                  \
+    static UE_UClass obj;                                                                             \
+    static uint32_t _cachedGen = 0;                                                                   \
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();                                         \
+    if (_cachedGen != _curGen)                                                                        \
+    {                                                                                                 \
+        obj = UEWrappers::GetObjects()->FindObject<UE_UClass>(NAME);                                  \
+        _cachedGen = _curGen;                                                                         \
+    }                                                                                                 \
+    return obj
+
+#define UE_FPROP_SUB_OFFSET_CACHED()                                                                  \
+    static uintptr_t offset = 0;                                                                      \
+    static uint32_t _cachedGen = 0;                                                                   \
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();                                         \
+    if (_cachedGen != _curGen)                                                                        \
+    {                                                                                                 \
+        offset = FindSubFPropertyBaseOffset();                                                        \
+        _cachedGen = _curGen;                                                                         \
+    }
+
 namespace UEWrappers
 {
     UEVars const *GUVars = nullptr;
     std::unique_ptr<UE_UObjectArray> pObjectsArray = nullptr;
+    static uint32_t gInitGen = 0;
 
     void Init(const UEVars *vars)
     {
@@ -22,6 +44,7 @@ namespace UEWrappers
                 pObjectsArray.reset();
             }
             pObjectsArray = std::make_unique<UE_UObjectArray>(vars->GetObjObjects_Objects());
+            ++gInitGen;
         }
     }
 
@@ -30,6 +53,7 @@ namespace UEWrappers
     UE_Offsets *GetOffsets() { return GUVars ? GUVars->GetOffsets() : nullptr; }
     std::string GetNameByID(int32_t id) { return GUVars ? GUVars->GetNameByID(id) : ""; }
     UE_UObjectArray *GetObjects() { return pObjectsArray.get(); }
+    uint32_t GetInitGeneration() { return gInitGen; }
 }  // namespace UEWrappers
 
 std::string FString::ToString() const
@@ -272,20 +296,17 @@ bool UE_UObject::HasFlags(EObjectFlags flags) const
 
 UE_UClass UE_UObject::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Object");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Object");
 }
 
 UE_UClass UE_UInterface::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Interface");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Interface");
 }
 
 UE_UClass UE_AActor::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class Engine.Actor");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class Engine.Actor");
 }
 
 UE_UField UE_UField::GetNext() const
@@ -298,8 +319,7 @@ UE_UField UE_UField::GetNext() const
 
 UE_UClass UE_UField::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Field");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Field");
 }
 
 std::string IUProperty::GetName() const
@@ -474,8 +494,7 @@ IUProperty UE_UProperty::GetInterface() const { return IUProperty(this); }
 
 UE_UClass UE_UProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Property");
 }
 
 UE_UStruct UE_UStruct::GetSuper() const
@@ -508,10 +527,17 @@ int32_t UE_UStruct::GetSize() const
 
 UE_UClass UE_UStruct::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Struct");
-        if (!obj) {
-        // 尝试实际观察到的小写名称
-        obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.struct");
+    static UE_UClass obj;
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
+    {
+        obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Struct");
+        if (!obj)
+        {
+            obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.struct");
+        }
+        _cachedGen = _curGen;
     }
     return obj;
 }
@@ -696,20 +722,17 @@ std::string UE_UFunction::GetFunctionFlags() const
 
 UE_UClass UE_UFunction::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Function");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Function");
 }
 
 UE_UClass UE_UScriptStruct::StaticClass()
 {
-    static UE_UClass obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.ScriptStruct");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.ScriptStruct");
 }
 
 UE_UClass UE_UClass::StaticClass()
 {
-    static UE_UClass obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Class");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Class");
 }
 
 TArray<uint8_t> UE_UEnum::GetNames() const
@@ -727,16 +750,14 @@ std::string UE_UEnum::GetName() const
 
 UE_UClass UE_UEnum::StaticClass()
 {
-    static UE_UClass obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Enum");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Enum");
 }
 
 std::string UE_UDoubleProperty::GetTypeStr() const { return "double"; }
 
 UE_UClass UE_UDoubleProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.DoubleProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.DoubleProperty");
 }
 
 UE_UStruct UE_UStructProperty::GetStruct() const
@@ -751,16 +772,14 @@ std::string UE_UStructProperty::GetTypeStr() const
 
 UE_UClass UE_UStructProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.StructProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.StructProperty");
 }
 
 std::string UE_UNameProperty::GetTypeStr() const { return "struct FName"; }
 
 UE_UClass UE_UNameProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.NameProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.NameProperty");
 }
 
 UE_UClass UE_UObjectPropertyBase::GetPropertyClass() const
@@ -775,8 +794,7 @@ std::string UE_UObjectPropertyBase::GetTypeStr() const
 
 UE_UClass UE_UObjectPropertyBase::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.ObjectPropertyBase");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.ObjectPropertyBase");
 }
 
 UE_UClass UE_UObjectProperty::GetPropertyClass() const
@@ -791,8 +809,7 @@ std::string UE_UObjectProperty::GetTypeStr() const
 
 UE_UClass UE_UObjectProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.ObjectProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.ObjectProperty");
 }
 
 UE_UProperty UE_UArrayProperty::GetInner() const
@@ -807,8 +824,7 @@ std::string UE_UArrayProperty::GetTypeStr() const
 
 UE_UClass UE_UArrayProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.ArrayProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.ArrayProperty");
 }
 
 UE_UEnum UE_UByteProperty::GetEnum() const
@@ -827,8 +843,7 @@ std::string UE_UByteProperty::GetTypeStr() const
 
 UE_UClass UE_UByteProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.ByteProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.ByteProperty");
 }
 
 uint8_t UE_UBoolProperty::GetFieldSize() const
@@ -862,96 +877,84 @@ std::string UE_UBoolProperty::GetTypeStr() const
 
 UE_UClass UE_UBoolProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.BoolProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.BoolProperty");
 }
 
 std::string UE_UFloatProperty::GetTypeStr() const { return "float"; }
 
 UE_UClass UE_UFloatProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.FloatProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.FloatProperty");
 }
 
 std::string UE_UIntProperty::GetTypeStr() const { return "int"; }
 
 UE_UClass UE_UIntProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.IntProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.IntProperty");
 }
 
 std::string UE_UInt16Property::GetTypeStr() const { return "int16_t"; }
 
 UE_UClass UE_UInt16Property::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Int16Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Int16Property");
 }
 
 std::string UE_UInt64Property::GetTypeStr() const { return "int64_t"; }
 
 UE_UClass UE_UInt64Property::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Int64Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Int64Property");
 }
 
 std::string UE_UInt8Property::GetTypeStr() const { return "uint8_t"; }
 
 UE_UClass UE_UInt8Property::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Int8Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Int8Property");
 }
 
 std::string UE_UUInt16Property::GetTypeStr() const { return "uint16_t"; }
 
 UE_UClass UE_UUInt16Property::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.UInt16Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.UInt16Property");
 }
 
 std::string UE_UUInt32Property::GetTypeStr() const { return "uint32_t"; }
 
 UE_UClass UE_UUInt32Property::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.UInt32Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.UInt32Property");
 }
 
 std::string UE_UInt32Property::GetTypeStr() const { return "int32_t"; }
 
 UE_UClass UE_UInt32Property::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.Int32Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.Int32Property");
 }
 
 std::string UE_UUInt64Property::GetTypeStr() const { return "uint64_t"; }
 
 UE_UClass UE_UUInt64Property::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.UInt64Property");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.UInt64Property");
 }
 
 std::string UE_UTextProperty::GetTypeStr() const { return "struct FText"; }
 
 UE_UClass UE_UTextProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.TextProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.TextProperty");
 }
 
 std::string UE_UStrProperty::GetTypeStr() const { return "struct FString"; }
 
 UE_UClass UE_UStrProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.StrProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.StrProperty");
 }
 
 UE_UProperty UE_UEnumProperty::GetUnderlayingProperty() const
@@ -975,8 +978,7 @@ std::string UE_UEnumProperty::GetTypeStr() const
 
 UE_UClass UE_UEnumProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.EnumProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.EnumProperty");
 }
 
 UE_UClass UE_UClassProperty::GetMetaClass() const
@@ -991,8 +993,7 @@ std::string UE_UClassProperty::GetTypeStr() const
 
 UE_UClass UE_UClassProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.ClassProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.ClassProperty");
 }
 
 std::string UE_USoftClassProperty::GetTypeStr() const
@@ -1013,8 +1014,7 @@ std::string UE_USetProperty::GetTypeStr() const
 
 UE_UClass UE_USetProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.SetProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.SetProperty");
 }
 
 UE_UProperty UE_UMapProperty::GetKeyProp() const
@@ -1034,8 +1034,7 @@ std::string UE_UMapProperty::GetTypeStr() const
 
 UE_UClass UE_UMapProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.MapProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.MapProperty");
 }
 
 UE_UProperty UE_UInterfaceProperty::GetInterfaceClass() const
@@ -1050,8 +1049,7 @@ std::string UE_UInterfaceProperty::GetTypeStr() const
 
 UE_UClass UE_UInterfaceProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.InterfaceProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.InterfaceProperty");
 }
 
 std::string UE_UMulticastDelegateProperty::GetTypeStr() const
@@ -1061,8 +1059,7 @@ std::string UE_UMulticastDelegateProperty::GetTypeStr() const
 
 UE_UClass UE_UMulticastDelegateProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.MulticastDelegateProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.MulticastDelegateProperty");
 }
 
 std::string UE_UWeakObjectProperty::GetTypeStr() const
@@ -1072,8 +1069,7 @@ std::string UE_UWeakObjectProperty::GetTypeStr() const
 
 UE_UClass UE_UWeakObjectProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.WeakObjectProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.WeakObjectProperty");
 }
 
 std::string UE_ULazyObjectProperty::GetTypeStr() const
@@ -1083,8 +1079,7 @@ std::string UE_ULazyObjectProperty::GetTypeStr() const
 
 UE_UClass UE_ULazyObjectProperty::StaticClass()
 {
-    static auto obj = UEWrappers::GetObjects()->FindObject<UE_UClass>("Class CoreUObject.LazyObjectProperty");
-    return obj;
+    UE_STATIC_CLASS_CACHED("Class CoreUObject.LazyObjectProperty");
 }
 
 std::string UE_FFieldClass::GetName() const
@@ -1370,9 +1365,12 @@ uintptr_t UE_FProperty::FindSubFPropertyBaseOffset() const
 UE_UStruct UE_FStructProperty::GetStruct() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_UStruct>(object + offset) : UE_UStruct();
 }
@@ -1385,9 +1383,12 @@ std::string UE_FStructProperty::GetTypeStr() const
 UE_UClass UE_FObjectPropertyBase::GetPropertyClass() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_UClass>(object + offset) : UE_UClass();
 }
@@ -1400,9 +1401,12 @@ std::string UE_FObjectPropertyBase::GetTypeStr() const
 UE_FProperty UE_FArrayProperty::GetInner() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_FProperty>(object + offset) : UE_FProperty();
 }
@@ -1415,9 +1419,12 @@ std::string UE_FArrayProperty::GetTypeStr() const
 UE_UEnum UE_FByteProperty::GetEnum() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     if (offset == 0) return nullptr;
 
@@ -1521,9 +1528,12 @@ std::string UE_FEnumProperty::GetTypeStr() const
 UE_UClass UE_FClassProperty::GetMetaClass() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_UClass>(object + offset + sizeof(void *)) : UE_UClass();
 }
@@ -1542,9 +1552,12 @@ std::string UE_FSoftClassProperty::GetTypeStr() const
 UE_FProperty UE_FSetProperty::GetElementProp() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_FProperty>(object + offset) : UE_FProperty();
 }
@@ -1557,9 +1570,12 @@ std::string UE_FSetProperty::GetTypeStr() const
 UE_FProperty UE_FMapProperty::GetKeyProp() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_FProperty>(object + offset) : UE_FProperty();
 }
@@ -1567,9 +1583,12 @@ UE_FProperty UE_FMapProperty::GetKeyProp() const
 UE_FProperty UE_FMapProperty::GetValueProp() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_FProperty>(object + offset + sizeof(void *)) : UE_FProperty();
 }
@@ -1582,9 +1601,12 @@ std::string UE_FMapProperty::GetTypeStr() const
 UE_UClass UE_FInterfaceProperty::GetInterfaceClass() const
 {
     static uintptr_t offset = 0;
-    if (offset == 0)
+    static uint32_t _cachedGen = 0;
+    const uint32_t _curGen = UEWrappers::GetInitGeneration();
+    if (_cachedGen != _curGen)
     {
         offset = FindSubFPropertyBaseOffset();
+        _cachedGen = _curGen;
     }
     return offset ? vm_rpm_ptr<UE_UClass>(object + offset) : UE_UClass();
 }
