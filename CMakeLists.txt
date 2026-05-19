@@ -1,12 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
-set(NDK_PATH E:/ndk/android-ndk-r29)
-set(CMAKE_TOOLCHAIN_FILE ${NDK_PATH}/build/cmake/android.toolchain.cmake)
-set(CMAKE_SYSTEM_NAME Android)
-set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_SYSTEM_VERSION 30)
-set(ANDROID_PLATFORM 30)
-set(ANDROID_ABI arm64-v8a)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/outputs/${ANDROID_ABI})
+
+# 让 CMake 参数由外部(如命令行或 workflow)输入，而不是写死在这里
+# 删除 NDK_PATH、CMAKE_TOOLCHAIN_FILE、CMAKE_SYSTEM_NAME、CMAKE_SYSTEM_VERSION、ANDROID_PLATFORM、ANDROID_ABI
+
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type")
 project(AutoUEDump)
 
 set(KITTYMEMORY_PATH KittyMemoryEx)
@@ -44,6 +41,11 @@ include_directories(
         src/GUI/My_Utils
         src/GUI/native_surface)
 link_libraries(-llog -landroid -lEGL -lGLESv3 -lvulkan -lz -ldl)
+
+# 动态根据 ABI 创建子目录输出
+if(DEFINED ANDROID_ABI)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/outputs/${ANDROID_ABI})
+endif()
 
 add_executable(AutoUEDump ${UE_SRC} ${UE_PROFILE_SRC} ${AUTOFIX_SRC} ${GUI_SRC} src/executable.cpp src/Dumper.cpp src/UPackageGenerator.cpp ${KITTYMEMORY_SRC} ${DEPS_PATH}/fmt/format.cc
         src/Utils/BufferFmt.cpp
