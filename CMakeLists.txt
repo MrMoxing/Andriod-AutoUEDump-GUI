@@ -40,13 +40,31 @@ include_directories(
         src/GUI/ImGui/misc/git_freetype
         src/GUI/My_Utils
         src/GUI/native_surface)
-link_libraries(-llog -landroid -lEGL -lGLESv3 -lvulkan -lz -ldl)
 
-# 动态根据 ABI 创建子目录输出
+# ============ 修改点 1：删掉原来的 link_libraries，改用 find_library ============
+
+# 查找系统库
+find_library(log-lib log)
+find_library(android-lib android)
+find_library(egl-lib EGL)
+find_library(glesv3-lib GLESv3)
+find_library(z-lib z)
+find_library(dl-lib dl)
+
+# Vulkan 只在 arm64-v8a 上可用
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    find_library(vulkan-lib vulkan)
+    message(STATUS "Vulkan library linked for arm64-v8a")
+else()
+    message(STATUS "Skipping Vulkan for ${ANDROID_ABI}")
+endif()
+
+# ============ 修改点 2：动态输出目录 ============
 if(DEFINED ANDROID_ABI)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/outputs/${ANDROID_ABI})
 endif()
 
+# ============ 可执行文件 ============
 add_executable(AutoUEDump ${UE_SRC} ${UE_PROFILE_SRC} ${AUTOFIX_SRC} ${GUI_SRC} src/executable.cpp src/Dumper.cpp src/UPackageGenerator.cpp ${KITTYMEMORY_SRC} ${DEPS_PATH}/fmt/format.cc
         src/Utils/BufferFmt.cpp
         src/Utils/KittyCmdln.cpp
@@ -59,5 +77,20 @@ target_compile_definitions(AutoUEDump PRIVATE
         IMGUI_ENABLE_FREETYPE
         IMGUI_DISABLE_DEBUG_TOOLS)
 
+# ============ 修改点 3：链接所有库 ============
 target_link_libraries(AutoUEDump PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/GUI/ImGui/misc/git_freetype/${ANDROID_ABI}/libfreetype.a)
+        # 基础系统库
+        ${log-lib}
+        ${android-lib}
+        ${egl-lib}
+        ${glesv3-lib}
+        ${z-lib}
+        ${dl-lib}
+        # freetype 静态库
+        ${CMAKE_SOURCE_DIR}/src/GUI/ImGui/misc/git_freetype/${ANDROID_ABI}/libfreetype.a
+)
+
+# 仅为 arm64-v8a 链接 Vulkan
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    target_link_libraries(AutoUEDump PRIVATE ${vulkan-lib})
+endif()
