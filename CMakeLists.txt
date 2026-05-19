@@ -53,10 +53,9 @@ find_library(dl-lib dl)
 
 # Vulkan 只在 arm64-v8a 上可用
 if(ANDROID_ABI STREQUAL "arm64-v8a")
-    find_library(vulkan-lib vulkan)
-    message(STATUS "Vulkan library linked for arm64-v8a")
-else()
-    message(STATUS "Skipping Vulkan for ${ANDROID_ABI}")
+    # 强制设置，跳过查找
+    set(vulkan-lib vulkan)
+    message(STATUS "Using Vulkan system library (hardcoded)")
 endif()
 
 # ============ 修改点 2：动态输出目录 ============
